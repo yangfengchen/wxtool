@@ -94,26 +94,43 @@ public class WxLoginServiceImpl implements WxLoginService{
                 .disableHtmlEscaping()
                 .create();
         Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(webwxinitParam),cookies);
-        System.out.println("第一次"+(String)rsMap.get("html"));
         InitResponseJson initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
         List<Cookie> responseCookies = (List<Cookie>)rsMap.get("cookie");
         if(initResponseJson.getBaseResponse().getRet() != 0){
             url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit?r="+(System.currentTimeMillis());
             url += "&pass_ticket="+loginParam.getPass_ticket()+"&lang=zh_CN";
             rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(webwxinitParam),cookies);
-            System.out.println("第二次"+(String)rsMap.get("html"));
             initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
             responseCookies = (List<Cookie>)rsMap.get("cookie");
         }
+        System.out.println("初始:"+(String)rsMap.get("html"));
+        webwxstatusnotify(initResponseJson,loginParam,cookies);
         gethyHtml(loginParam,responseCookies);
+    }
+
+    //开启微信通知
+    public void webwxstatusnotify(InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+        String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxstatusnotify";
+        WxStatusNotifyEntity wxStatusNotifyEntity = new WxStatusNotifyEntity();
+        BaseRequest baseRequest = new BaseRequest(loginParam.getWxsid(),loginParam.getSkey(),loginParam.getWxuin());
+        wxStatusNotifyEntity.setBaseRequest(baseRequest);
+        wxStatusNotifyEntity.setFromUserName(initResponseJson.getUser().getUserName());
+        wxStatusNotifyEntity.setToUserName(initResponseJson.getUser().getUserName());
+        wxStatusNotifyEntity.setClientMsgId(DateUtil.getDateTime());
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(wxStatusNotifyEntity),cookies);
+        System.out.println("初始化:"+(String)rsMap.get("html"));
     }
 
     public void gethyHtml(LoginParam loginParam,List<Cookie> cookies) throws Exception {
         String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact";
-        url += "?lang=zh_CN&pass_ticket="+loginParam.getPass_ticket();
-        url += "&seq=0&skey="+loginParam.getSkey()+"&r="+DeviceIdStrUtil.getRandomNum(10);
+        url += "?seq=0&skey="+loginParam.getSkey()+"&r="+DateUtil.getDateTime();
+        System.out.println(url);
         String html = HttpClientUtil.httpGet(url,cookies);
-        System.out.println(html);
+        System.out.println("content:"+html);
     }
 
     public WxLoginOne getWxLoginParam(String redirectUrl) throws Exception {

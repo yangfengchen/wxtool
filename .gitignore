@@ -2,6 +2,7 @@ target/*
 .idea/*
 .idea*
 \.idea*
+*.iml
 # Auto detect text files and perform LF normalization
 * text=auto
 
