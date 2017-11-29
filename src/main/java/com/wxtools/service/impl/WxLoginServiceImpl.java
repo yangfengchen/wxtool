@@ -2,7 +2,6 @@ package com.wxtools.service.impl;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.sun.org.apache.bcel.internal.generic.GOTO;
 import com.wxtools.component.WxUrlComponent;
 import com.wxtools.entity.*;
 import com.wxtools.service.WxLoginService;
@@ -13,14 +12,10 @@ import org.dom4j.DocumentException;
 import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
 import org.springframework.stereotype.Service;
-import sun.net.www.http.HttpClient;
 import javax.annotation.Resource;
 import java.lang.reflect.Method;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
 /**
  * Created by Administrator on 2017/10/15.
  */
@@ -103,8 +98,9 @@ public class WxLoginServiceImpl implements WxLoginService{
             initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
             responseCookies = (List<Cookie>)rsMap.get("cookie");
         }
-        System.out.println("初始:"+(String)rsMap.get("html"));
-        webwxstatusnotify(initResponseJson,loginParam,cookies);
+        //System.out.println("初始:"+(String)rsMap.get("html"));
+        System.out.println("cookies:"+gson.toJson(cookies));
+        webwxstatusnotify(initResponseJson,loginParam,responseCookies);
         gethyHtml(loginParam,responseCookies);
     }
 
@@ -121,7 +117,7 @@ public class WxLoginServiceImpl implements WxLoginService{
                 .setPrettyPrinting()
                 .disableHtmlEscaping()
                 .create();
-        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(wxStatusNotifyEntity),cookies);
+        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(wxStatusNotifyEntity),null);
         System.out.println("初始化:"+(String)rsMap.get("html"));
     }
 
@@ -131,6 +127,18 @@ public class WxLoginServiceImpl implements WxLoginService{
         System.out.println(url);
         String html = HttpClientUtil.httpGet(url,cookies);
         System.out.println("content:"+html);
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+        InitResponseJson initResponseJson = gson.fromJson(html,InitResponseJson.class);
+        if(initResponseJson.getBaseResponse().getRet() != 0){
+            url = "https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact";
+            url += "?seq=0&skey="+loginParam.getSkey()+"&r="+DateUtil.getDateTime();
+            System.out.println(url);
+            html = HttpClientUtil.httpGet(url,cookies);
+            System.out.println("content:"+html);
+        }
     }
 
     public WxLoginOne getWxLoginParam(String redirectUrl) throws Exception {

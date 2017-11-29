@@ -24,5 +24,5 @@ public class InitResponseJson {
     private String SKey;
     private SyncKey SyncKey;
     private Long SystemTime;
-    private User user;
+    private User User;
 }

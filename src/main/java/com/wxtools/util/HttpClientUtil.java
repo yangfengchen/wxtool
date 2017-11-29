@@ -214,9 +214,11 @@ public class HttpClientUtil {
 
     public static BasicCookieStore setCookieParam(List<Cookie> cookieList){
         BasicCookieStore cookieStore = new BasicCookieStore();
-        cookieList.stream()
-                .distinct()
-                .forEach((Cookie cookie) -> cookieStore.addCookie(cookie));
+        if(cookieList != null && cookieList.size() > 0){
+            cookieList.stream()
+                    .distinct()
+                    .forEach((Cookie cookie) -> cookieStore.addCookie(cookie));
+        }
         return cookieStore;
     }
 }
