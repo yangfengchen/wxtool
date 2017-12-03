@@ -1,5 +1,6 @@
 package com.wxtools.service.impl;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.wxtools.component.WxUrlComponent;
@@ -7,6 +8,7 @@ import com.wxtools.entity.*;
 import com.wxtools.service.WxLoginService;
 import com.wxtools.util.*;
 import org.apache.http.cookie.Cookie;
+import org.apache.http.impl.cookie.BasicClientCookie;
 import org.dom4j.Document;
 import org.dom4j.DocumentException;
 import org.dom4j.DocumentHelper;
@@ -14,8 +16,12 @@ import org.dom4j.Element;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.lang.reflect.Method;
+import java.net.URLEncoder;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+
 /**
  * Created by Administrator on 2017/10/15.
  */
@@ -63,7 +69,9 @@ public class WxLoginServiceImpl implements WxLoginService{
                     }else if (result[0].replace("window.code=", "").equals("200")) {
                         return result[1].replace("window.redirect_uri=", "").replace("\"", "").trim();
                     }
-                }catch (Exception ex){}
+                }catch (Exception ex){
+
+                }
         }catch (Exception ex){
             ex.printStackTrace();
         }
@@ -75,38 +83,37 @@ public class WxLoginServiceImpl implements WxLoginService{
         WxLoginOne wxLoginOne = getWxLoginParam(redirectUrl);
         LoginParam loginParam = wxLoginOne.getLoginParam();
         List<Cookie> cookies = wxLoginOne.getCookieList();
-        getzjHtml(loginParam,cookies);
+        String startUrl;
+        if(redirectUrl.startsWith("https://wx.qq.com")){
+            startUrl = "https://wx.qq.com/";
+        }else if(redirectUrl.startsWith("https://wx2.qq.com")){
+            startUrl = "https://wx2.qq.com/";
+        }else{
+            throw new Exception("错误");
+        }
+        getzjHtml(startUrl,loginParam,cookies);
     }
 
-    public void getzjHtml(LoginParam loginParam,List<Cookie> cookies) throws Exception {
-        String url = "https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxinit?r="+(System.currentTimeMillis());
+    public void getzjHtml(String startUrl,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxinit?r="+(System.currentTimeMillis());
         url += "&pass_ticket="+loginParam.getPass_ticket()+"&lang=zh_CN";
         WebwxinitParam webwxinitParam = new WebwxinitParam();
         BaseRequest baseRequest = new BaseRequest(loginParam.getWxsid(),loginParam.getSkey(),loginParam.getWxuin());
         webwxinitParam.setBaseRequest(baseRequest);
         Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
+                //.setPrettyPrinting()
                 .disableHtmlEscaping()
                 .create();
         Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(webwxinitParam),cookies);
         InitResponseJson initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
         List<Cookie> responseCookies = (List<Cookie>)rsMap.get("cookie");
-        if(initResponseJson.getBaseResponse().getRet() != 0){
-            url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit?r="+(System.currentTimeMillis());
-            url += "&pass_ticket="+loginParam.getPass_ticket()+"&lang=zh_CN";
-            rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(webwxinitParam),cookies);
-            initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
-            responseCookies = (List<Cookie>)rsMap.get("cookie");
-        }
-        //System.out.println("初始:"+(String)rsMap.get("html"));
-        System.out.println("cookies:"+gson.toJson(cookies));
-        webwxstatusnotify(initResponseJson,loginParam,responseCookies);
-        gethyHtml(loginParam,responseCookies);
+        webwxstatusnotify(startUrl,initResponseJson,loginParam,responseCookies);
+        gethyHtml(startUrl,initResponseJson,loginParam,responseCookies);
     }
 
     //开启微信通知
-    public void webwxstatusnotify(InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
-        String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxstatusnotify";
+    public void webwxstatusnotify(String startUrl,InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxstatusnotify";
         WxStatusNotifyEntity wxStatusNotifyEntity = new WxStatusNotifyEntity();
         BaseRequest baseRequest = new BaseRequest(loginParam.getWxsid(),loginParam.getSkey(),loginParam.getWxuin());
         wxStatusNotifyEntity.setBaseRequest(baseRequest);
@@ -114,31 +121,337 @@ public class WxLoginServiceImpl implements WxLoginService{
         wxStatusNotifyEntity.setToUserName(initResponseJson.getUser().getUserName());
         wxStatusNotifyEntity.setClientMsgId(DateUtil.getDateTime());
         Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
+                //.setPrettyPrinting()
                 .disableHtmlEscaping()
                 .create();
-        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(wxStatusNotifyEntity),null);
-        System.out.println("初始化:"+(String)rsMap.get("html"));
+        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(wxStatusNotifyEntity),cookies);
     }
 
-    public void gethyHtml(LoginParam loginParam,List<Cookie> cookies) throws Exception {
-        String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact";
+    //获取好友
+    public void gethyHtml(String startUrl,InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxgetcontact";
         url += "?seq=0&skey="+loginParam.getSkey()+"&r="+DateUtil.getDateTime();
-        System.out.println(url);
         String html = HttpClientUtil.httpGet(url,cookies);
-        System.out.println("content:"+html);
+        //System.out.println("content:"+html);
         Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
+                //.setPrettyPrinting()
                 .disableHtmlEscaping()
                 .create();
-        InitResponseJson initResponseJson = gson.fromJson(html,InitResponseJson.class);
-        if(initResponseJson.getBaseResponse().getRet() != 0){
-            url = "https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact";
-            url += "?seq=0&skey="+loginParam.getSkey()+"&r="+DateUtil.getDateTime();
-            System.out.println(url);
-            html = HttpClientUtil.httpGet(url,cookies);
-            System.out.println("content:"+html);
+
+        UserResponseJson userResponseJson = gson.fromJson(html,UserResponseJson.class);
+        if(userResponseJson != null && userResponseJson.getMemberList() != null
+                && userResponseJson.getMemberList().size() > 0){
+            List<Contact> contacts = userResponseJson.getMemberList();
+            /*contacts.stream().filter(contact -> contact.getVerifyFlag() == 0).forEach((Contact contact) ->
+                    System.out.println(gson.toJson(contact))
+            );*/
+            List<Contact> hyContacts = contacts.stream()
+                                        .filter((Contact contact) -> {
+                                            if(contact.getVerifyFlag() == 0
+                                                    && (contact.getNickName().equals("随风飘雨")
+                                                        || contact.getNickName().equals("风熄")
+                                                        )){
+                                                return true;
+                                            }else{
+                                                return false;
+                                            }
+                                        })
+                                        .collect(Collectors.toList());
+            /*hyContacts.stream()
+                    .forEach((Contact contact) -> System.out.println(contact.getNickName()
+                    + "" + contact.getUserName()));*/
+            if(hyContacts != null && hyContacts.size() > 0){
+
+                WebwxsyncResult webwxsyncResult = webwxsync(startUrl,initResponseJson,loginParam,cookies);
+                SynccheckParam synccheckParam = processSynccheckParam(startUrl,loginParam,webwxsyncResult,initResponseJson,webwxsyncResult.getCookies());
+                synccheckParam = synccheck(synccheckParam);
+                //System.out.println(synccheckParam.getHtml());
+                if(synccheckParam.getHtml().indexOf("7") != -1){
+                    twoWebwxsync(synccheckParam,synccheckParam.getCookies());
+                    webwxsyncResult = twoWebwxsync(synccheckParam,synccheckParam.getCookies());
+                    synccheckParam = processSynccheckParam(startUrl,loginParam,webwxsyncResult,initResponseJson,webwxsyncResult.getCookies());
+                    synccheckParam = synccheck(synccheckParam);
+                }
+
+                processHyContacts(startUrl,hyContacts,synccheckParam.getCookies(),synccheckParam);
+            }
+
         }
+    }
+    private SynccheckParam processSynccheckParam(String startUrl,LoginParam loginParam,WebwxsyncResult webwxsyncResult,InitResponseJson initResponseJson,List<Cookie> cookies){
+        SynccheckParam synccheckParam = new SynccheckParam();
+        synccheckParam.setStartUrl(startUrl);
+        synccheckParam.setH(DateUtil.getDateTime());
+        synccheckParam.setCookies(cookies);
+        synccheckParam.setDeviceid(DeviceIdStrUtil.getDeviceIdStr(15));
+        synccheckParam.setSid(loginParam.getWxsid());
+        synccheckParam.setSkey(loginParam.getSkey());
+        synccheckParam.setUin(loginParam.getWxuin());
+        synccheckParam.setR(DateUtil.getDateTime()+500);
+        synccheckParam.setPass_ticket(loginParam.getPass_ticket());
+        synccheckParam.setIsgrayscale(loginParam.getIsgrayscale());
+        synccheckParam.setUser(initResponseJson.getUser());
+        synccheckParam.setSyncKeys(webwxsyncResult.getSyncResponseJson().getSyncCheckKey());
+        List<SyncKeyMap> list = webwxsyncResult.getSyncResponseJson().getSyncCheckKey().getList();
+        String syncKey = "";
+        for(SyncKeyMap syncKeyMap : list){
+            syncKey += syncKeyMap.getKey() +"_"+syncKeyMap.getVal()+"|";
+        }
+        if(syncKey.length() > 0){
+            syncKey = syncKey.substring(0,syncKey.length() - 1);
+        }
+        synccheckParam.setSynckey(syncKey);
+        return synccheckParam;
+    }
+
+    private SynccheckParam processTwoSynccheckParam(String startUrl,WebwxsyncResult webwxsyncResult,List<Cookie> cookies,SynccheckParam oldSynccheckParam){
+        SynccheckParam synccheckParam = new SynccheckParam();
+        synccheckParam.setStartUrl(startUrl);
+        synccheckParam.setH(DateUtil.getDateTime());
+        synccheckParam.setCookies(cookies);
+        synccheckParam.setDeviceid(DeviceIdStrUtil.getDeviceIdStr(15));
+        synccheckParam.setSid(oldSynccheckParam.getSid());
+        synccheckParam.setSkey(oldSynccheckParam.getSkey());
+        synccheckParam.setUin(oldSynccheckParam.getUin());
+        synccheckParam.setR(DateUtil.getDateTime()+500);
+        synccheckParam.setPass_ticket(oldSynccheckParam.getPass_ticket());
+        synccheckParam.setIsgrayscale(oldSynccheckParam.getIsgrayscale());
+        synccheckParam.setUser(oldSynccheckParam.getUser());
+        synccheckParam.setSyncKeys(webwxsyncResult.getSyncResponseJson().getSyncCheckKey());
+        List<SyncKeyMap> list = webwxsyncResult.getSyncResponseJson().getSyncCheckKey().getList();
+        String syncKey = "";
+        for(SyncKeyMap syncKeyMap : list){
+            syncKey += syncKeyMap.getKey() +"_"+syncKeyMap.getVal()+"|";
+        }
+        if(syncKey.length() > 0){
+            syncKey = syncKey.substring(0,syncKey.length() - 1);
+        }
+        synccheckParam.setSynckey(syncKey);
+        return synccheckParam;
+    }
+
+
+    public SynccheckParam synccheck(SynccheckParam synccheckParam) throws Exception {
+        synccheckParam.setR(synccheckParam.getR()+1);
+        synccheckParam.setR(DateUtil.getDateTime());
+        String url = synccheckParam.getStartUrl() +"cgi-bin/mmwebwx-bin/synccheck?r="+synccheckParam.getR()
+                +"&skey="+ URLEncoder.encode(synccheckParam.getSkey(),"utf-8")+"&sid="+synccheckParam.getSid()
+                +"&uin="+synccheckParam.getUin()+"&deviceid="+DeviceIdStrUtil.getDeviceIdStr(15)
+                +"&synckey="+URLEncoder.encode(synccheckParam.getSynckey(),"utf-8")+"&_"+synccheckParam.getH();
+        Map<String,Object> map = HttpClientUtil.httpGetByMap(url,synccheckParam.getCookies());
+        synccheckParam.setCookies((List<Cookie>) map.get("cookie"));
+        synccheckParam.setHtml((String)map.get("html"));
+        return synccheckParam;
+    }
+
+    public WebwxsyncResult webwxsync(String startUrl,InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxsync?sid="+loginParam.getWxsid()
+                +"&skey="+loginParam.getSkey()+"&lang=zh_CN&pass_ticket="+loginParam.getPass_ticket();
+        WebwxsyncParam webwxsyncParam = new WebwxsyncParam();
+        BaseRequest baseRequest = new BaseRequest(loginParam.getWxsid(),loginParam.getSkey(),loginParam.getWxuin());
+        webwxsyncParam.setBaseRequest(baseRequest);
+        webwxsyncParam.setSyncKey(initResponseJson.getSyncKey());
+        webwxsyncParam.setRr(0L-DateUtil.getDateTime());
+        Gson gson = new GsonBuilder()
+                //.setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+        Map<String,Object> map = HttpClientUtil.httpPostJson(url,gson.toJson(webwxsyncParam),cookies);
+        List<Cookie> newCookies = (List<Cookie>) map.get("cookie");
+        SyncResponseJson syncResponseJson = gson.fromJson((String)map.get("html"),SyncResponseJson.class);
+        WebwxsyncResult webwxsyncResult = new WebwxsyncResult();
+        webwxsyncResult.setCookies(newCookies);
+        webwxsyncResult.setLoginParam(loginParam);
+        webwxsyncResult.setSyncResponseJson(syncResponseJson);
+        return webwxsyncResult;
+    }
+
+    public WebwxsyncResult twoWebwxsync(SynccheckParam synccheckParam,List<Cookie> cookies) throws Exception {
+        String url = synccheckParam.getStartUrl() + "cgi-bin/mmwebwx-bin/webwxsync?sid="+synccheckParam.getSid()
+                +"&skey="+synccheckParam.getSkey()+"&lang=zh_CN&pass_ticket="+synccheckParam.getPass_ticket();
+        WebwxsyncParam webwxsyncParam = new WebwxsyncParam();
+        BaseRequest baseRequest = new BaseRequest(synccheckParam.getSid(),synccheckParam.getSkey(),synccheckParam.getUin());
+        webwxsyncParam.setBaseRequest(baseRequest);
+        webwxsyncParam.setSyncKey(synccheckParam.getSyncKeys());
+        webwxsyncParam.setRr((0L - Long.valueOf(DeviceIdStrUtil.getRandomNum(9))));
+        Gson gson = new GsonBuilder()
+               // .setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+        Map<String,Object> map = HttpClientUtil.httpPostJson(url,gson.toJson(webwxsyncParam),cookies);
+        List<Cookie> newCookies = (List<Cookie>) map.get("cookie");
+        SyncResponseJson syncResponseJson = gson.fromJson((String)map.get("html"),SyncResponseJson.class);
+        WebwxsyncResult webwxsyncResult = new WebwxsyncResult();
+        webwxsyncResult.setCookies(newCookies);
+
+        LoginParam loginParam = new LoginParam();
+        loginParam.setPass_ticket(synccheckParam.getPass_ticket());
+        loginParam.setSkey(synccheckParam.getSkey());
+        loginParam.setWxsid(synccheckParam.getSid());
+        loginParam.setWxuin(String.valueOf(synccheckParam.getUin()));
+
+        webwxsyncResult.setLoginParam(loginParam);
+        webwxsyncResult.setSyncResponseJson(syncResponseJson);
+
+        return webwxsyncResult;
+    }
+
+    private List<Contact> processHyContacts(String startUrl,List<Contact> hyContacts,List<Cookie> cookies,SynccheckParam synccheckParam){
+        //ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        List<Contact> contactResult = Lists.newArrayList();
+        try{
+            List<Future<ThreadResult>> futures = Lists.newArrayList();
+            for(Contact contact : hyContacts){
+                SendMsgJson sendMsgJson = new SendMsgJson();
+
+                BaseRequest baseRequest = new BaseRequest();
+                baseRequest.setUin(synccheckParam.getUin());
+                baseRequest.setSkey(synccheckParam.getSkey());
+                baseRequest.setSid(synccheckParam.getSid());
+                baseRequest.setDeviceID(DeviceIdStrUtil.getDeviceIdStr(15));
+
+                Msg msg = new Msg();
+                msg.setClientMsgId(DateUtil.getDateTime()+DeviceIdStrUtil.getRandomNum(4));
+                msg.setLocalID(msg.getClientMsgId());
+                msg.setContent("清理助手");
+                msg.setType(1);
+                msg.setFromUserName(synccheckParam.getUser().getUserName());
+                msg.setToUserName(contact.getUserName());
+
+                sendMsgJson.setBaseRequest(baseRequest);
+                sendMsgJson.setScene(0);
+                sendMsgJson.setMsg(msg);
+
+                sendMsg(startUrl,sendMsgJson,contact,synccheckParam.getPass_ticket(),cookies,synccheckParam);
+                /*HyContactsThread hyContactsThread = new HyContactsThread(startUrl,sendMsgJson,contact,synccheckParam.getPass_ticket(),cookies);
+                Future<ThreadResult> future = executorService.submit(hyContactsThread);
+                futures.add(future);*/
+            }
+            /*for(Future future : futures){
+                ThreadResult thredResult = (ThreadResult)future.get();
+                if("delete".equals(thredResult.getCode())){
+                    contactResult.add(thredResult.getContact());
+                }
+            }*/
+        }catch (Exception ex){
+            ex.printStackTrace();
+        }finally {
+          //  executorService.shutdownNow();
+        }
+        return contactResult;
+    }
+
+    private SynccheckParam sendMsg(String startUrl, SendMsgJson sendMsgJson,Contact contacts,String Pass_ticket, List<Cookie> cookies,SynccheckParam synccheckParam) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxsendmsg";//?lang=zh_CN&pass_ticket="+Pass_ticket
+        Gson gson = new GsonBuilder()
+                //.setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+        List<Cookie> newCookies = Lists.newArrayList();
+        BasicClientCookie bacommon = new BasicClientCookie("test","name");
+        cookies.stream().forEach((Cookie cookie) ->{
+            if("wxuin".equals(cookie.getName())){
+                BasicClientCookie basicClientCookie
+                        = new BasicClientCookie(cookie.getName()
+                        ,cookie.getValue());
+                basicClientCookie.setDomain(cookie.getDomain());
+                basicClientCookie.setPath(cookie.getPath());
+                basicClientCookie.setExpiryDate(cookie.getExpiryDate());
+                newCookies.add(basicClientCookie);
+                bacommon.setDomain(cookie.getDomain());
+                bacommon.setPath(cookie.getPath());
+                bacommon.setExpiryDate(cookie.getExpiryDate());
+            }
+            newCookies.add(cookie);
+        });
+
+        BasicClientCookie basicClientCookie
+                = new BasicClientCookie("login_frequency","2");
+        basicClientCookie.setDomain(bacommon.getDomain());
+        basicClientCookie.setPath(bacommon.getPath());
+        basicClientCookie.setExpiryDate(bacommon.getExpiryDate());
+        newCookies.add(basicClientCookie);
+        BasicClientCookie notifyCookie
+                = new BasicClientCookie("MM_WX_NOTIFY_STATE","1");
+        notifyCookie.setDomain(bacommon.getDomain());
+        notifyCookie.setPath(bacommon.getPath());
+        notifyCookie.setExpiryDate(bacommon.getExpiryDate());
+        newCookies.add(notifyCookie);
+        BasicClientCookie soundCookie
+                = new BasicClientCookie("MM_WX_SOUND_STATE","1");
+        soundCookie.setDomain(bacommon.getDomain());
+        soundCookie.setPath(bacommon.getPath());
+        soundCookie.setExpiryDate(bacommon.getExpiryDate());
+        newCookies.add(soundCookie);
+        String data = gson.toJson(sendMsgJson);
+
+        Map<String,Object> map = HttpClientUtil.httpPostJson(url,data,newCookies);
+        //System.out.println((String) map.get("html"));
+       /* System.out.println("cookie:"+gson.toJson(newCookies));*/
+      /* new Thread(new Runnable() {
+           @Override
+           public void run() {
+               try {
+                   Map<String,Object> map = HttpClientUtil.httpPostJson(url,data,newCookies);
+                   System.out.println("消息返回"+(String) map.get("html"));
+               } catch (Exception e) {
+                   e.printStackTrace();
+               }
+           }
+       }).start();*/
+        WebwxsyncResult webwxsyncResult = twoWebwxsync(synccheckParam,synccheckParam.getCookies());
+        synccheckParam.setSyncKeys(webwxsyncResult.getSyncResponseJson().getSyncCheckKey());
+        webwxsyncResult = twoWebwxsync(synccheckParam,synccheckParam.getCookies());
+        SynccheckParam newSynccheckParam = processTwoSynccheckParam(startUrl,webwxsyncResult,webwxsyncResult.getCookies(),synccheckParam);
+        newSynccheckParam = synccheck(newSynccheckParam);
+        if(webwxsyncResult.getSyncResponseJson().getAddMsgList() != null
+                && webwxsyncResult.getSyncResponseJson().getAddMsgList().size() > 0){
+            List<AddMsgList> addMsgLists = webwxsyncResult.getSyncResponseJson().getAddMsgList();
+            List<AddMsgList> newAddMsgList = addMsgLists.stream().filter((AddMsgList addMsgList) -> {
+                if(addMsgList.getToUserName().equals(sendMsgJson.getMsg().getToUserName())
+                        && addMsgList.getFromUserName().equals(sendMsgJson.getMsg().getFromUserName())
+                        && addMsgList.getContent().indexOf("开启了朋友验证，你还不是他（她）朋友。请先发送朋友验证请求，对方验证通过后，才能聊天。") != -1){
+                    return true;
+                }else{
+                    return false;
+                }
+            }).collect(Collectors.toList());
+            if(newAddMsgList != null && newAddMsgList.size() > 0){
+                //修改备注
+                updateReamrk(startUrl,contacts,newSynccheckParam,newCookies);
+            }
+        }
+        return newSynccheckParam;
+    }
+
+    public void updateReamrk(String startUrl,Contact contact,SynccheckParam synccheckParam,List<Cookie> cookies) throws Exception {
+        String url = startUrl + "cgi-bin/mmwebwx-bin/webwxoplog";
+        UpdateReamrkEntity updateReamrkEntity = new UpdateReamrkEntity();
+
+        BaseRequest baseRequest = new BaseRequest();
+        baseRequest.setDeviceID(DeviceIdStrUtil.getDeviceIdStr(15));
+        baseRequest.setSid(synccheckParam.getSid());
+        baseRequest.setSkey(synccheckParam.getSkey());
+        baseRequest.setUin(synccheckParam.getUin());
+
+        updateReamrkEntity.setBaseRequest(baseRequest);
+        updateReamrkEntity.setRemarkName("delete"+contact.getRemarkName());
+        updateReamrkEntity.setUserName(contact.getUserName());
+
+        Gson gson = new GsonBuilder()
+                //.setPrettyPrinting()
+                .disableHtmlEscaping()
+                .create();
+
+        BasicClientCookie soundCookie
+                = new BasicClientCookie("refreshTimes","5");
+        soundCookie.setDomain(cookies.get(0).getDomain());
+        soundCookie.setPath(cookies.get(0).getPath());
+        soundCookie.setExpiryDate(cookies.get(0).getExpiryDate());
+        cookies.add(soundCookie);
+
+        Map<String,Object> map = HttpClientUtil.httpPostJson(url,gson.toJson(updateReamrkEntity),cookies);
+        //System.out.println(map.get("html"));
     }
 
     public WxLoginOne getWxLoginParam(String redirectUrl) throws Exception {
@@ -176,55 +489,4 @@ public class WxLoginServiceImpl implements WxLoginService{
         }
         return loginParam;
     }
-
-    /*
- List<Cookie> cookieList = HttpClientUtil.httpGetCookie(redirectUrl+"&fun=new&version=v2");
-        System.out.println("一次cookie"+gson.toJson(cookieList));
-        cookieList = getWebwxstatreport(cookieList);
-        LoginCookie loginCookie = CommonUtil.parseLoginResult(cookieList);
-        InitResponseObj initResponseObj = getResponseJson(cookieList,loginCookie);
-        InitResponseJson initResponseJson = initResponseObj.getInitResponseJson();
-        System.out.println("initResponse"+gson.toJson(initResponseJson));
-        Webwxgetcontact webwxgetcontact = webwxgetcontact(initResponseJson.getSKey(),initResponseObj.getCookieList());
-        System.out.println(gson.toJson(webwxgetcontact));
-
-
-    private List<Cookie> getWebwxstatreport(List<Cookie> cookieList) throws Exception {
-        //String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxstatreport?fun=new";
-        String url = "https://wx2.qq.com";
-        Map<String,Object> rsMap = HttpClientUtil.httpGetByMap(url,cookieList);
-        return (List<Cookie>) rsMap.get("cookie");
-    }
-
-    private Webwxgetcontact webwxgetcontact(String skey,List<Cookie> cookieList) throws Exception {
-        Gson gson = new Gson();
-        String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact?r=%s&seq=0&skey=%s";
-        url = String.format(url,DeviceIdStrUtil.getRandomNum(13),skey);
-        String html = HttpClientUtil.httpGet(url,cookieList);
-        //System.out.println("Webwxgetcontact页面"+gson.toJson(html));
-        Webwxgetcontact webwxgetcontact = gson.fromJson(html,Webwxgetcontact.class);
-        *//*webwxgetcontact.getMemberList()
-                .forEach((Contact contact) -> System.out.println(gson.toJson(contact)));*//*
-        JdbcUtil.insertDb(webwxgetcontact.getMemberList());
-        return webwxgetcontact;
-    }
-
-    private InitResponseObj getResponseJson(List<Cookie> cookieList,LoginCookie loginCookie) throws Exception {
-        WebwxinitParam webwxinitParam = new WebwxinitParam();
-        BaseRequest baseRequest = new BaseRequest(loginCookie.getWxsid(),"",loginCookie.getWxuin());
-        webwxinitParam.setBaseRequest(baseRequest);
-        Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
-                .disableHtmlEscaping()
-                .create();
-        String url = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit?r=-"+DeviceIdStrUtil.getRandomNum(10);
-        Map<String,Object> rsMap = HttpClientUtil.httpPostJson(url,gson.toJson(webwxinitParam),cookieList);
-        System.out.println("InitResponseJson页面"+gson.toJson((String)rsMap.get("html")));
-        InitResponseJson initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
-        InitResponseObj initResponseObj = new InitResponseObj();
-        initResponseObj.setInitResponseJson(initResponseJson);
-        initResponseObj.setCookieList((List<Cookie>)rsMap.get("cookie"));
-        return initResponseObj;
-    }*/
-
 }
