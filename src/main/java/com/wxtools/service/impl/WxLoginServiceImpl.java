@@ -147,10 +147,7 @@ public class WxLoginServiceImpl implements WxLoginService{
             );*/
             List<Contact> hyContacts = contacts.stream()
                                         .filter((Contact contact) -> {
-                                            if(contact.getVerifyFlag() == 0
-                                                    && (contact.getNickName().equals("随风飘雨")
-                                                        || contact.getNickName().equals("风熄")
-                                                        )){
+                                            if(contact.getVerifyFlag() == 0){
                                                 return true;
                                             }else{
                                                 return false;
