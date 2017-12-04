@@ -13,5 +13,5 @@ import java.util.Map;
 @Getter
 public class SyncKey {
     private long Count;
-    private List<Map<String,Long>> List;
+    private List<SyncKeyMap> List;
 }
