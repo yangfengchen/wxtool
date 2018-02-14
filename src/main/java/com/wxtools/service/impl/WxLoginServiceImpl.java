@@ -79,7 +79,7 @@ public class WxLoginServiceImpl implements WxLoginService{
     }
 
     @Override
-    public void getWxStatus(String uuid, String redirectUrl) throws Exception {
+    public void getWxStatus(String uuid, String redirectUrl,String content) throws Exception {
         WxLoginOne wxLoginOne = getWxLoginParam(redirectUrl);
         LoginParam loginParam = wxLoginOne.getLoginParam();
         List<Cookie> cookies = wxLoginOne.getCookieList();
@@ -91,10 +91,10 @@ public class WxLoginServiceImpl implements WxLoginService{
         }else{
             throw new Exception("错误");
         }
-        getzjHtml(startUrl,loginParam,cookies);
+        getzjHtml(startUrl,loginParam,cookies,content);
     }
 
-    public void getzjHtml(String startUrl,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+    public void getzjHtml(String startUrl,LoginParam loginParam,List<Cookie> cookies,String content) throws Exception {
         String url = startUrl + "cgi-bin/mmwebwx-bin/webwxinit?r="+(System.currentTimeMillis());
         url += "&pass_ticket="+loginParam.getPass_ticket()+"&lang=zh_CN";
         WebwxinitParam webwxinitParam = new WebwxinitParam();
@@ -108,7 +108,7 @@ public class WxLoginServiceImpl implements WxLoginService{
         InitResponseJson initResponseJson = gson.fromJson((String)rsMap.get("html"),InitResponseJson.class);
         List<Cookie> responseCookies = (List<Cookie>)rsMap.get("cookie");
         webwxstatusnotify(startUrl,initResponseJson,loginParam,responseCookies);
-        gethyHtml(startUrl,initResponseJson,loginParam,responseCookies);
+        gethyHtml(startUrl,initResponseJson,loginParam,responseCookies,content);
     }
 
     //开启微信通知
@@ -128,7 +128,7 @@ public class WxLoginServiceImpl implements WxLoginService{
     }
 
     //获取好友
-    public void gethyHtml(String startUrl,InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies) throws Exception {
+    public void gethyHtml(String startUrl,InitResponseJson initResponseJson,LoginParam loginParam,List<Cookie> cookies,String content) throws Exception {
         String url = startUrl + "cgi-bin/mmwebwx-bin/webwxgetcontact";
         url += "?seq=0&skey="+loginParam.getSkey()+"&r="+DateUtil.getDateTime();
         String html = HttpClientUtil.httpGet(url,cookies);
@@ -170,7 +170,7 @@ public class WxLoginServiceImpl implements WxLoginService{
                     synccheckParam = synccheck(synccheckParam);
                 }
 
-                processHyContacts(startUrl,hyContacts,synccheckParam.getCookies(),synccheckParam);
+                processHyContacts(startUrl,hyContacts,synccheckParam.getCookies(),synccheckParam,content);
             }
 
         }
@@ -293,7 +293,7 @@ public class WxLoginServiceImpl implements WxLoginService{
         return webwxsyncResult;
     }
 
-    private List<Contact> processHyContacts(String startUrl,List<Contact> hyContacts,List<Cookie> cookies,SynccheckParam synccheckParam){
+    private List<Contact> processHyContacts(String startUrl,List<Contact> hyContacts,List<Cookie> cookies,SynccheckParam synccheckParam,String content){
         //ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Contact> contactResult = Lists.newArrayList();
         try{
@@ -310,7 +310,10 @@ public class WxLoginServiceImpl implements WxLoginService{
                 Msg msg = new Msg();
                 msg.setClientMsgId(DateUtil.getDateTime()+DeviceIdStrUtil.getRandomNum(4));
                 msg.setLocalID(msg.getClientMsgId());
-                msg.setContent("清理助手");
+                if(null == content || "".equals(content)){
+                    content = "清理助手!";
+                }
+                msg.setContent(content);
                 msg.setType(1);
                 msg.setFromUserName(synccheckParam.getUser().getUserName());
                 msg.setToUserName(contact.getUserName());
@@ -415,7 +418,7 @@ public class WxLoginServiceImpl implements WxLoginService{
             }).collect(Collectors.toList());
             if(newAddMsgList != null && newAddMsgList.size() > 0){
                 //修改备注
-                updateReamrk(startUrl,contacts,newSynccheckParam,newCookies);
+                //updateReamrk(startUrl,contacts,newSynccheckParam,newCookies);
             }
         }
         return newSynccheckParam;

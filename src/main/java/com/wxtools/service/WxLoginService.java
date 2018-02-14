@@ -13,5 +13,5 @@ public interface WxLoginService {
 
     String redirectUrl(String uuid) throws Exception;
 
-    void getWxStatus(String uuid,String redirectUrl) throws Exception;
+    void getWxStatus(String uuid,String redirectUrl,String content) throws Exception;
 }

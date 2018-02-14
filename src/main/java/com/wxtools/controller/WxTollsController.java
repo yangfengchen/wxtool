@@ -65,13 +65,14 @@ public class WxTollsController {
 
     @RequestMapping("/homeIndex")
     public String homeIndex(@RequestParam(value="uuid", required=false) String uuid,
-                            @RequestParam(value="url", required=false)  String url, HttpServletRequest request){
+                            @RequestParam(value="url", required=false)  String url,
+                            @RequestParam(value="content", required=true)  String content,HttpServletRequest request){
         try{
-            wxLoginService.getWxStatus(uuid,url);
+            wxLoginService.getWxStatus(uuid,url,content);
         }catch (Exception e){
             logger.error("获取微信信息出错!",e);
             e.printStackTrace();
         }
-        return "logins";
+        return "homeIndex";
     }
 }
