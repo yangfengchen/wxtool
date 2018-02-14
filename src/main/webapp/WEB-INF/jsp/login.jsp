@@ -51,10 +51,14 @@
                     $("#message").html(data.message);
                     setTimeout(login,$SET_TIMEOUT);
                 }else if(data.code == "200"){
-                    console.log(data);
+                    //console.log(data);
                     $("#message").html('');
                     $("#homeForm").html('');
                     $("#homeForm").append("<input name='uuid' value='"+$("#uuid").val()+"'/>");
+                    if($("#content").val() == ""){
+                        alert("请填写祝福语!");
+                        return false;
+                    }
                     $("#homeForm").append("<input name='content' value='"+$("#content").val()+"'/>");
                     $("#homeForm").append("<input name='url' value='"+data.obj+"'/>");
                     $("#homeForm").submit();
